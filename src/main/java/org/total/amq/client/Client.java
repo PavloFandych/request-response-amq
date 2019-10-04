@@ -11,31 +11,33 @@ import java.util.UUID;
  */
 
 @Slf4j
-public class Client implements MessageListener {
-
-    private MessageProducer producer;
+public class Client {
 
     private Client() {
         final ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
-        Connection connection;
-        try {
-            connection = connectionFactory.createConnection();
+        try (final Connection connection = connectionFactory.createConnection();
+                final Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);) {
             connection.start();
 
-            final Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
             final Destination clientRequest = session.createQueue("client.messages");
             final Destination temporaryQueue = session.createTemporaryQueue();
 
             final MessageConsumer responseConsumer = session.createConsumer(temporaryQueue);
-            responseConsumer.setMessageListener(this);
+            responseConsumer.setMessageListener(localMessage -> {
+                try {
+                    if (localMessage instanceof TextMessage) {
+                        final String messageText = ((TextMessage) localMessage).getText();
 
-            final TextMessage message = session.createTextMessage();
-            message.setText("MyProtocolMessage");
-            message.setJMSReplyTo(temporaryQueue);
-            message.setJMSCorrelationID(UUID.randomUUID().toString());
+                        log.info("messageText from AMQ =======> " + messageText);
+                    }
+                } catch (JMSException e) {
+                    log.info("Exception occurred", e);
+                }
+            });
 
-            producer = session.createProducer(clientRequest);
-            producer.send(message);
+            final TextMessage message = generateRequest(session, temporaryQueue);
+
+            sendMessage(session, clientRequest, message);
         } catch (JMSException e) {
             log.info("Exception occurred", e);
         }
@@ -45,15 +47,19 @@ public class Client implements MessageListener {
         new Client();
     }
 
-    @Override
-    public void onMessage(Message message) {
-        try {
-            if (message instanceof TextMessage) {
-                final String messageText = ((TextMessage) message).getText();
+    private TextMessage generateRequest(Session session, Destination temporaryQueue) throws JMSException {
+        final TextMessage message = session.createTextMessage();
+        message.setText("MyProtocolMessage");
+        message.setJMSReplyTo(temporaryQueue);
+        message.setJMSCorrelationID(UUID.randomUUID().toString());
 
-                log.info("messageText from AMQ =======> " + messageText);
-            }
-        } catch (JMSException e) {
+        return message;
+    }
+
+    private void sendMessage(final Session session, final Destination clientRequest, final TextMessage message) {
+        try (final MessageProducer producer = session.createProducer(clientRequest);) {
+            producer.send(message);
+        } catch (Exception e) {
             log.info("Exception occurred", e);
         }
     }

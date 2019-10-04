@@ -11,7 +11,7 @@ import javax.jms.*;
  */
 
 @Slf4j
-public class Server implements MessageListener {
+public class Server {
 
     private Session session;
 
@@ -32,7 +32,21 @@ public class Server implements MessageListener {
             responseProducer = session.createProducer(null);
 
             final MessageConsumer consumer = session.createConsumer(clientRequest);
-            consumer.setMessageListener(this);
+            consumer.setMessageListener(message -> {
+                try {
+                    final TextMessage response = session.createTextMessage();
+                    if (message instanceof TextMessage) {
+                        final String messageText = ((TextMessage) message).getText();
+                        response.setText(messageProtocol.handleProtocolMessage(messageText));
+                    }
+
+                    response.setJMSCorrelationID(message.getJMSCorrelationID());
+
+                    responseProducer.send(message.getJMSReplyTo(), response);
+                } catch (JMSException e) {
+                    log.info("Exception occurred", e);
+                }
+            });
         } catch (JMSException e) {
             log.info("Exception occurred", e);
         }
@@ -40,22 +54,5 @@ public class Server implements MessageListener {
 
     public static void main(String[] args) {
         new Server();
-    }
-
-    @Override
-    public void onMessage(Message message) {
-        try {
-            final TextMessage response = session.createTextMessage();
-            if (message instanceof TextMessage) {
-                final String messageText = ((TextMessage) message).getText();
-                response.setText(messageProtocol.handleProtocolMessage(messageText));
-            }
-
-            response.setJMSCorrelationID(message.getJMSCorrelationID());
-
-            responseProducer.send(message.getJMSReplyTo(), response);
-        } catch (JMSException e) {
-            log.info("Exception occurred", e);
-        }
     }
 }
