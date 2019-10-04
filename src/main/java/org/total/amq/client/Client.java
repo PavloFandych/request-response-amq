@@ -13,10 +13,12 @@ import java.util.UUID;
 @Slf4j
 public class Client {
 
+    private static final String EXCEPTION_OCCURRED = "Exception occurred";
+
     private Client() {
         final ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616");
         try (final Connection connection = connectionFactory.createConnection();
-                final Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);) {
+             final Session session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE)) {
             connection.start();
 
             final Destination clientRequest = session.createQueue("client.messages");
@@ -31,7 +33,7 @@ public class Client {
                         log.info("messageText from AMQ =======> " + messageText);
                     }
                 } catch (JMSException e) {
-                    log.info("Exception occurred", e);
+                    log.info(EXCEPTION_OCCURRED, e);
                 }
             });
 
@@ -39,7 +41,7 @@ public class Client {
 
             sendMessage(session, clientRequest, message);
         } catch (JMSException e) {
-            log.info("Exception occurred", e);
+            log.info(EXCEPTION_OCCURRED, e);
         }
     }
 
@@ -47,20 +49,26 @@ public class Client {
         new Client();
     }
 
-    private TextMessage generateRequest(Session session, Destination temporaryQueue) throws JMSException {
-        final TextMessage message = session.createTextMessage();
-        message.setText("MyProtocolMessage");
-        message.setJMSReplyTo(temporaryQueue);
-        message.setJMSCorrelationID(UUID.randomUUID().toString());
+    private TextMessage generateRequest(final Session session,
+                                        final Destination temporaryQueue) throws JMSException {
+        final TextMessage request = session.createTextMessage();
+        request.setText("MyProtocolMessage");
+        request.setJMSReplyTo(temporaryQueue);
 
-        return message;
+        final String id = UUID.randomUUID().toString();
+        request.setJMSCorrelationID(id);
+        request.setJMSMessageID(id);
+
+        return request;
     }
 
-    private void sendMessage(final Session session, final Destination clientRequest, final TextMessage message) {
+    private void sendMessage(final Session session,
+                             final Destination clientRequest,
+                             final TextMessage message) {
         try (final MessageProducer producer = session.createProducer(clientRequest);) {
             producer.send(message);
         } catch (Exception e) {
-            log.info("Exception occurred", e);
+            log.info(EXCEPTION_OCCURRED, e);
         }
     }
 }

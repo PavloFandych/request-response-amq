@@ -13,6 +13,8 @@ import javax.jms.*;
 @Slf4j
 public class Server {
 
+    private static final String EXCEPTION_OCCURRED = "Exception occurred";
+
     private Session session;
 
     private MessageProducer responseProducer;
@@ -32,23 +34,24 @@ public class Server {
             responseProducer = session.createProducer(null);
 
             final MessageConsumer consumer = session.createConsumer(clientRequest);
-            consumer.setMessageListener(message -> {
+            consumer.setMessageListener(request -> {
                 try {
                     final TextMessage response = session.createTextMessage();
-                    if (message instanceof TextMessage) {
-                        final String messageText = ((TextMessage) message).getText();
+                    if (request instanceof TextMessage) {
+                        final String messageText = ((TextMessage) request).getText();
                         response.setText(messageProtocol.handleProtocolMessage(messageText));
                     }
 
-                    response.setJMSCorrelationID(message.getJMSCorrelationID());
+                    response.setJMSMessageID(request.getJMSMessageID());
+                    response.setJMSCorrelationID(request.getJMSCorrelationID());
 
-                    responseProducer.send(message.getJMSReplyTo(), response);
+                    responseProducer.send(request.getJMSReplyTo(), response);
                 } catch (JMSException e) {
-                    log.info("Exception occurred", e);
+                    log.info(EXCEPTION_OCCURRED, e);
                 }
             });
         } catch (JMSException e) {
-            log.info("Exception occurred", e);
+            log.info(EXCEPTION_OCCURRED, e);
         }
     }
 
